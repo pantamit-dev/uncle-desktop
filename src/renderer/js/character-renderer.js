@@ -5,6 +5,75 @@ import { CharacterRig, trackFrame, applyPose } from './character-rig.js';
 import { ConversationMotion } from './conversation-motion.js';
 import { TorsoMotion, drawTorsoMotion, torsoRegions } from './torso-motion.js';
 
+// Lachy's Capri sprite strips; attribution and license are in assets/capri/strips/NOTICE.txt.
+export const CAPRI_STRIPS = {
+  idle: { count: 16, fps: 8, scale: 1.11, anchor: 'feet' },
+  mouth: { count: 5, fps: 12, scale: 1.11, anchor: 'feet' },
+  dangle: { count: 24, fps: 10, scale: 1.11, anchor: 'feet' },
+  sleep: { count: 16, fps: 6, scale: 1.11, anchor: 'feet' },
+  perch: { count: 16, fps: 8, scale: 1, anchor: 'seat', seat: 0.79 },
+  walk: { count: 12, fps: 12, scale: 1.11, anchor: 'feet' },
+  dance: { count: 16, fps: 12, scale: 1.11, anchor: 'feet' },
+  wake: { count: 13, fps: 15, scale: 1.11, anchor: 'feet' },
+  glitch: { count: 10, fps: 15, scale: 1.11, anchor: 'feet' },
+  grin: { count: 16, fps: 8, scale: 1.11, anchor: 'feet' },
+  arrive: { count: 14, fps: 15, scale: 1.11, anchor: 'feet' },
+  leave: { count: 12, fps: 15, scale: 1.11, anchor: 'feet' },
+  perch_blink: { count: 4, fps: 8, scale: 1, anchor: 'seat', seat: 0.79 },
+  perch_blink_glitch: { count: 4, fps: 8, scale: 1, anchor: 'seat', seat: 0.79 },
+  perch_glitch: { count: 10, fps: 15, scale: 1, anchor: 'seat', seat: 0.79 },
+  perch_dance: { count: 16, fps: 12, scale: 1, anchor: 'seat', seat: 0.79 },
+  perch_arrive: { count: 14, fps: 15, scale: 1, anchor: 'seat', seat: 0.79 },
+  perch_leave: { count: 12, fps: 15, scale: 1, anchor: 'seat', seat: 0.79 },
+};
+
+export function capriStripFor({ stance, mode, act, reaction, dance, clip }, still = false) {
+  if (still || mode === 'alert' || reaction) return null;
+  if (stance === 'fly' || stance === 'fall' || stance === 'down' || stance === 'peek') return null;
+  if (clip && CAPRI_STRIPS[clip]) return clip;
+  if (stance === 'held') return 'dangle';
+  if (act && act !== 'talk') return null;
+  if (dance && mode === 'idle') return stance === 'sit' ? 'perch_dance' : 'dance';
+  if (stance === 'sit') return 'perch';
+  if (stance !== 'stand') return null;
+  return mode === 'sleep' ? 'sleep' : 'idle';
+}
+
+// Text-based mouth approximation from the Capri strip renderer; Thai letters flap.
+export function capriMouthCell(text, elapsed) {
+  const step = Math.floor(Math.max(0, elapsed) * 12 / 1000);
+  const chars = [...String(text || '')];
+  const ch = chars[Math.floor(step / 12 * 28)];
+  if (!ch) return step % 2 ? 1 : 2;
+  const lower = ch.toLowerCase();
+  if ('aeo'.includes(lower)) return ch === lower ? 3 : 4;
+  if ('iuy'.includes(lower)) return 2;
+  if ('mbp'.includes(lower) || !/\p{L}/u.test(ch)) return 0;
+  return step % 2 ? 1 : 2;
+}
+
+function loadCapriStrip(name) {
+  const spec = CAPRI_STRIPS[name];
+  return new Promise(resolve => {
+    const image = new Image();
+    image.onload = () => {
+      if (!image.width || image.width % spec.count || !image.height || image.width * image.height * 4 > 32 * 1024 * 1024) return resolve(null);
+      const width = image.width / spec.count;
+      try {
+        const frames = Array.from({ length: spec.count }, (_, i) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = image.height;
+          canvas.getContext('2d').drawImage(image, i * width, 0, width, image.height, 0, 0, width, image.height);
+          return canvas;
+        });
+        resolve({ frames, width, height: image.height, bytes: image.width * image.height * 4 });
+      } catch { resolve(null); }
+    };
+    image.onerror = () => resolve(null);
+    image.src = `../../assets/capri/strips/${name}.png`;
+  });
+}
+
 // Use one coordinate system for drawing, dragging, collision and effect anchors.
 export const SPRITE = {
   width: 320, height: 420, pad: 56,
@@ -143,6 +212,11 @@ export class CharacterRenderer {
     this.ctx.imageSmoothingQuality = 'high';
   }
 
+  playClip(name) {
+    if (reducedMotion.matches || !this.source?.manifest.variants[0].layers[0].tracks?.[name]) return;
+    this.special = {name, started: performance.now()};
+  }
+
   draw(p, context = {}) {
     const now = performance.now();
     const state = animationFor(context);
@@ -154,6 +228,12 @@ export class CharacterRenderer {
     const motion = this.motion.update(now, {...context, state, still: reducedMotion.matches || this.character.stillImage});
     const secondary = this.torso?.update(now, {...context,...motion,state,
       angle:motion.angle+(context.bodyAngle||0),still:reducedMotion.matches});
+    if (this.special) {
+      const frames=this.source?.manifest.variants[0].layers[0].tracks?.[this.special.name];
+      const elapsed=now-this.special.started;
+      if (!frames || reducedMotion.matches || state!=='idle' || context.reaction || context.lineTalking || context.talk>.04 || context.act || context.dance || context.clip==='walk' || !['stand','sit'].includes(context.stance) || elapsed>=frames.length*1000/(this.character.fps || 4)) this.special=null;
+      else context={...context,special:{name:this.special.name,elapsed}};
+    }
     if (this.source) this.prepareComposite(now, {...context, ...motion});
     const { ctx, canvas } = this;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -309,6 +389,12 @@ class CapriRenderer {
     this.source = document.createElement('canvas');
     this.legacy = new SpriteRenderer(this.source, image);
     this.legacy.resize(1);
+    this.strips = new Map();
+    this.loading = new Set();
+    this.stripBytes = 0;
+    this.strip = null;
+    this.special = null;
+    this.disposed = false;
     const mask = document.createElement('canvas');
     mask.width = SPRITE.width;
     mask.height = SPRITE.height;
@@ -324,23 +410,105 @@ class CapriRenderer {
         }
       }
     }
+    this.basePixels = this.pixels;
+    this.hitCanvas = document.createElement('canvas');
+    this.hitCanvas.width = SPRITE.width;
+    this.hitCanvas.height = SPRITE.height;
+    this.hitCtx = this.hitCanvas.getContext('2d', { willReadFrequently: true });
+    this.hitFrame = null;
   }
 
   resize(scale) { CharacterRenderer.prototype.resize.call(this, scale); }
 
+  playClip(name) {
+    if (!CAPRI_STRIPS[name] || reducedMotion.matches) return;
+    this.special = { name, started: null };
+    this.strip = null;
+    this.getStrip(name);
+  }
+
+  getStrip(name) {
+    if (this.strips.has(name)) {
+      const strip = this.strips.get(name);
+      this.strips.delete(name); this.strips.set(name, strip);
+      return strip;
+    }
+    if (!this.loading.has(name)) {
+      this.loading.add(name);
+      loadCapriStrip(name).then(strip => {
+        this.loading.delete(name);
+        if (this.disposed) return;
+        while (strip && this.stripBytes + strip.bytes > 32 * 1024 * 1024 && this.strips.size) {
+          const oldest = this.strips.keys().next().value;
+          this.stripBytes -= this.strips.get(oldest)?.bytes || 0;
+          this.strips.delete(oldest);
+        }
+        this.strips.set(name, strip);
+        this.stripBytes += strip?.bytes || 0;
+      });
+    }
+    return null;
+  }
+
   draw(p, context) {
     this.state = animationFor(context);
-    this.legacy.draw(p);
     const { ctx, canvas } = this;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     const scale = this.scale * (window.devicePixelRatio || 1);
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    if (this.special && (context.mode === 'alert' || context.reaction || context.lineTalking || context.talk > 0.04 || (context.act && context.act !== 'talk') || ['fly', 'fall', 'held', 'down', 'peek'].includes(context.stance))) this.special = null;
+    const special = this.special;
+    const name = capriStripFor({ ...context, clip: special?.name || context.clip }, reducedMotion.matches || p.silAmount > 0 || p.collapse > 0 || p.dissolve > 0);
+    const clip = name && this.getStrip(name);
+    if (clip) {
+      const now = performance.now(), spec = CAPRI_STRIPS[name];
+      if (this.strip?.name !== name) this.strip = { name, start: now };
+      if (special && name === special.name) {
+        special.started ??= now;
+        if (now - special.started >= spec.count * 1000 / spec.fps) { this.special = null; this.strip = null; return this.draw(p, context); }
+      }
+      let index = Math.floor((now - this.strip.start) * spec.fps / 1000) % spec.count;
+      let shown = clip;
+      if (name === 'perch' && index >= 9 && index < 13) {
+        const lap = Math.floor((now - this.strip.start) * spec.fps / 1000 / spec.count);
+        const blink = this.getStrip(lap % 5 === 4 ? 'perch_blink_glitch' : 'perch_blink');
+        if (blink) { shown = blink; index -= 9; }
+      }
+      const height = SPRITE.height * spec.scale, width = height * clip.width / clip.height;
+      const x = SPRITE.pad + SPRITE.feet.x - width / 2;
+      const y = spec.anchor === 'seat' ? SPRITE.pad + SPRITE.hip - height * spec.seat : SPRITE.pad + SPRITE.feet.y - height;
+      ctx.imageSmoothingEnabled = false;
+      ctx.save();
+      ctx.globalAlpha = clamp(p.alpha ?? 1, 0, 1);
+      ctx.translate(2 * (SPRITE.pad + SPRITE.feet.x), 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(shown.frames[index], x, y, width, height);
+      const talking = context.lineTalking || context.talk > 0.04;
+      const mouth = name === 'idle' && talking ? this.getStrip('mouth') : null;
+      if (mouth) {
+        const mouthFrame = capriMouthCell(context.talkLine, now - (context.talkStarted || now));
+        ctx.drawImage(mouth.frames[mouthFrame], x, y, width, height);
+      }
+      ctx.restore();
+      const hitFrame = `${name}:${shown === clip ? '' : 'blink'}:${index}`;
+      if (this.hitFrame !== hitFrame) {
+        this.hitCtx.clearRect(0, 0, SPRITE.width, SPRITE.height);
+        this.hitCtx.drawImage(canvas, SPRITE.pad * scale, SPRITE.pad * scale, SPRITE.width * scale, SPRITE.height * scale, 0, 0, SPRITE.width, SPRITE.height);
+        this.pixels = this.hitCtx.getImageData(0, 0, SPRITE.width, SPRITE.height).data;
+        this.hitFrame = hitFrame;
+      }
+      return;
+    }
+    this.strip = null;
+    this.pixels = this.basePixels;
+    this.hitFrame = null;
+    this.legacy.draw(p);
     talkStretch(ctx, this, context?.talk);
     ctx.drawImage(this.source, SPRITE.feet.x - CAPRI.feet.x, 0, CAPRI.width + CAPRI.pad * 2, CAPRI.height + CAPRI.pad * 2);
   }
 
-  dispose() { this.legacy.gl.getExtension('WEBGL_lose_context')?.loseContext(); }
+  dispose() { this.disposed = true; this.strips.clear(); this.hitCanvas.width = this.hitCanvas.height = 1; this.legacy.gl.getExtension('WEBGL_lose_context')?.loseContext(); }
 }
 
 export function createCharacterRenderer(canvas, image, character) {

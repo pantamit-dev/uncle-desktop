@@ -93,11 +93,13 @@ test('independent blink, mouth, gaze and leg tracks preserve other states',async
 test('optional composite action tracks yield to speech, alerts and reduced motion',async()=>{
   const {trackFrame}=await load('character-rig.js');
   const layer={role:'composite',frames:Array.from({length:8},()=>({})),
-    tracks:{idle:[0],attention:[1],held:[2,3],walk:[4,5],sit:[6],dance:[7]}};
+    tracks:{idle:[0],attention:[1],held:[2,3],walk:[4,5],sit:[6],dance:[7],wake:[1,2,3]}};
   assert.equal(trackFrame(layer,'idle',250,4,{stance:'held',act:'grabbed'}),3);
   assert.equal(trackFrame(layer,'idle',250,4,{stance:'stand',clip:'walk'}),5);
   assert.equal(trackFrame(layer,'idle',0,4,{stance:'sit'}),6);
   assert.equal(trackFrame(layer,'idle',0,4,{stance:'stand',dance:true}),7);
+  assert.equal(trackFrame(layer,'idle',0,4,{stance:'sit',dance:true}),6);
+  assert.equal(trackFrame(layer,'idle',9999,4,{stance:'stand',special:{name:'wake',elapsed:250}}),2);
   for(const context of [{still:true},{talk:.5},{lineTalking:true},{act:'hop'},{reaction:'attention'}])
     assert.equal(trackFrame(layer,'idle',0,4,{stance:'stand',clip:'walk',...context}),0);
   assert.equal(trackFrame(layer,'attention',0,4,{stance:'stand',clip:'walk'}),1);
@@ -116,7 +118,10 @@ test('Mochi motion packs keep both views and include bounded action tracks',asyn
       assert.equal(tracks.walk.length,4);
       assert.equal(tracks.dance.length,4);
       assert.ok(new Set(tracks.sit).size>=3);
-      assert.equal(tracks.held.length,1);
+      assert.ok(new Set(tracks.held).size>=4);
+      assert.equal(tracks.wake.length,4);
+      assert.equal(tracks.arrive.length,4);
+      assert.deepEqual(tracks.leave,[...tracks.arrive].reverse());
       for(const page of variant.pages) assert.ok(fs.existsSync(path.join(__dirname,'../assets/characters',path.dirname(file),page.file)));
     }
   }
@@ -141,6 +146,45 @@ test('Mochi walks in both directions and stops for interaction or reduced motion
     reducedMotion.setting='reduced';
     const actor=make(100);Capri.prototype.mochiStroll.call(actor);assert.equal(actor.mochiWalking,undefined);
   } finally {global.requestAnimationFrame=previous;reducedMotion.setting=setting;}
+});
+
+test('available idle actions are equally likely and never randomly select dancing',async()=>{
+  global.matchMedia ??= () => ({matches:false,addEventListener(){}});
+  const {Capri}=await load('capri.js');
+  const previous=Math.random;
+  try {
+    for(const [id,seat,expected] of [['mochi',null,['peek','teleport','flourish','walk']],['mochi',{},['sit','peek','teleport','flourish','walk']],['capri',{},['sit','peek','teleport','flourish','walk']]]) {
+      for(let i=0;i<expected.length;i++) {
+        let action='';Math.random=()=>(i+.5)/expected.length;
+        const actor={wander:true,locked:false,stance:'stand',fondness:0,character:{id,renderer:id==='capri'?'capri':undefined},
+          pickSeat:()=>seat,peek:()=>{action='peek';},mochiStroll:()=>{action='walk';},capriStroll:()=>{action='walk';},
+          sitOn:()=>{action='sit';},spot:()=>({}),teleport:()=>{action='teleport';},flourish:()=>{action='flourish';},capriDance:()=>{action='dance';}};
+        Capri.prototype.wanderStep.call(actor);
+        assert.equal(action,expected[i],`character=${id}, seat=${!!seat}, index=${i}`);
+      }
+    }
+    for(const [perch,canPossess,expected] of [[{id:'taskbar'},false,['flourish','teleport']],[{id:'window'},false,['flourish','fall','teleport']],[{id:'window'},true,['flourish','fall','teleport','possess']]]) {
+      for(let i=0;i<expected.length;i++) {
+        let action='';Math.random=()=>(i+.5)/expected.length;
+        const actor={wander:true,locked:false,stance:'sit',perch,fondness:0,canPossess:()=>canPossess,
+          flourish:()=>{action='flourish';},fall:()=>{action='fall';},spot:()=>({}),
+          teleport:()=>{action='teleport';},possess:()=>{action='possess';}};
+        Capri.prototype.wanderStep.call(actor);assert.equal(action,expected[i]);
+      }
+    }
+  } finally {Math.random=previous;}
+});
+
+test('dancing requires an actively playing media session',async()=>{
+  global.matchMedia ??= () => ({matches:false,addEventListener(){}});
+  const {Capri}=await load('capri.js');
+  let context;
+  const actor={animate(){},place(){},sprite:{draw(_p,c){context=c;}},p:{},mode:'idle',stance:'stand',
+    character:{id:'mochi'},pos:{x:0,y:0},manualDance:true,capriAmbient:{name:'dance'}};
+  Capri.prototype.drawFrame.call(actor,100);
+  assert.equal(context.dance,false);assert.equal(context.clip,undefined);
+  actor.musicDance=true;Capri.prototype.drawFrame.call(actor,101);assert.equal(context.dance,true);
+  actor.musicDance=false;await Capri.prototype.capriDance.call(actor);assert.equal(actor.capriAmbient.name,'dance');
 });
 
 test('shipped bust art contains six distinct native-size source poses and validated atlas pages', async()=>{

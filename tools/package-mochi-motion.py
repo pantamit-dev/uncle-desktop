@@ -64,7 +64,7 @@ def build(view, motion):
     else:
         frames.extend(motion)
     tracks = dict(layer['tracks'])
-    tracks.update(walk=list(range(30, 34)), sit=[34, 34, 35, 34, 36, 34, 37, 34], held=[38], dance=[39, 40, 41, 42])
+    tracks.update(walk=list(range(30, 34)), sit=[34, 34, 35, 34, 36, 34, 37, 34], held=[43, 44, 45, 46, 45, 44], dance=[39, 40, 41, 42], wake=[47, 48, 49, 50], arrive=[51, 52, 53, 54], leave=[54, 53, 52, 51])
     result = packer.pack({'sourceDetail': 'Existing Mochi frames with authored motion candidates'},
                          [({'id': 'body', 'role': 'composite', 'continuousTracks': True, 'tracks': tracks}, frames)],
                          out, (320, 640), 2048)
@@ -85,6 +85,18 @@ if __name__ == '__main__':
         motion.append(register(clean(sheet.crop((left, 0, right, sheet.height))), height=440, bottom=764))
     motion.append(register(clean(Image.open(SOURCE / 'held-full.png'))))
     sheet = Image.open(SOURCE / 'dance-cycle.png').convert('RGBA')
+    for i in range(4):
+        left, right = round(i * sheet.width / 4), round((i + 1) * sheet.width / 4)
+        motion.append(register(clean(sheet.crop((left, 0, right, sheet.height)))))
+    sheet = Image.open(SOURCE / 'held-cycle.png').convert('RGBA')
+    for i in range(4):
+        left, right = round(i * sheet.width / 4), round((i + 1) * sheet.width / 4)
+        motion.append(register(clean(sheet.crop((left, 0, right, sheet.height)))))
+    sheet = Image.open(SOURCE / 'wake-cycle.png').convert('RGBA')
+    for i in range(4):
+        left, right = round(i * sheet.width / 4), round((i + 1) * sheet.width / 4)
+        motion.append(register(clean(sheet.crop((left, 0, right, sheet.height)))))
+    sheet = Image.open(SOURCE / 'arrive-cycle.png').convert('RGBA')
     for i in range(4):
         left, right = round(i * sheet.width / 4), round((i + 1) * sheet.width / 4)
         motion.append(register(clean(sheet.crop((left, 0, right, sheet.height)))))

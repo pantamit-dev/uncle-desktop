@@ -431,8 +431,9 @@ export class Capri {
     this.animate(now);
     const reaction = now < (this.reactionUntil || 0) ? this.reaction : '';
     this.sprite.draw(this.p, { mode: this.mode, act: this.act?.player.name, reaction, talk: this.talk?.() || 0,
-      dance:!!(this.musicDance||this.manualDance) && !this.busy && !this.dragging && !this.hidden && !this.stowed && !this.dormant && this.stance==='stand',
-      clip: this.mochiWalking ? 'walk' : undefined,
+      dance:!!this.musicDance && !this.busy && !this.dragging && !this.hidden && !this.stowed && !this.dormant && (this.stance==='stand' || ((this.character.renderer === 'capri' || this.character.id === 'mochi') && this.stance === 'sit')),
+      clip: this.mochiWalking ? 'walk' : (!this.musicDance && ['dance','perch_dance'].includes(this.capriAmbient?.name) ? undefined : this.capriAmbient?.name),
+      lineTalking: this.lineTalking, talkLine: this.talkLine, talkStarted: this.talkStarted,
       position: this.pos, stance: this.stance, moving: this.stance === 'fly',
       bodyAngle: this.tilt * DEG,
       gaze: this.mouse ? {x: clamp((this.mouse.x-this.pos.x)/300,-1,1),y:clamp((this.mouse.y-this.head().y)/300,-1,1)} : null });
@@ -564,51 +565,45 @@ export class Capri {
       if (this.stance !== 'peek') this.flourish();
       return;
     }
-    // attached to you (bond.js): now and then she just comes over to where your pointer is
-    if (this.fondness >= 3 && this.mouse && Math.random() < 0.2) {
+    const actions = [];
+    if (this.fondness >= 3 && this.mouse) {
       const to = this.summonSpot(this.mouse);
-      if (Math.hypot(to.x - this.pos.x, to.y - this.pos.y) > 200) {
-        this.teleport(to, { face: this.mouse.x < to.x ? 1 : -1 }).then(() => this.perform('curious', this.mouse && this.mouse.x < this.pos.x ? -1 : 1));
-        return;
-      }
+      if (Math.hypot(to.x - this.pos.x, to.y - this.pos.y) > 200)
+        actions.push(() => this.teleport(to, { face: this.mouse.x < to.x ? 1 : -1 }).then(() => this.perform('curious', this.mouse && this.mouse.x < this.pos.x ? -1 : 1)));
     }
     if (this.stance === 'sit' && this.perch?.id === 'taskbar') {
-      // nothing to hop off or take over down there: a flourish, or off for a bit (she comes back)
-      if (Math.random() < 0.6) this.flourish();
-      else this.teleport(this.spot('random'));
-      return;
+      actions.push(() => this.flourish(), () => this.teleport(this.spot('random')));
+    } else if (this.stance === 'sit') {
+      actions.push(() => this.flourish(), () => this.fall(), () => this.teleport(this.spot('random')));
+      if (this.canPossess()) actions.push(() => this.possess());
+    } else {
+      const seat = this.pickSeat();
+      if (seat) actions.push(() => this.sitOn(seat));
+      actions.push(() => this.peek(), () => this.teleport(this.spot('random')), () => this.flourish());
+      if (this.stance === 'stand' && this.character.id === 'mochi') actions.push(() => this.mochiStroll());
+      else if (this.stance === 'stand' && this.character.renderer === 'capri') actions.push(() => this.capriStroll());
     }
-    if (this.stance === 'sit') {
-      const r = Math.random();
-      if (r < 0.3) this.flourish();
-      else if (r < 0.5 && this.canPossess()) this.possess();
-      else if (r < 0.75) this.fall(); // just hops off the ledge
-      else this.teleport(this.spot('random'));
-      return;
-    }
-    const seat = this.pickSeat();
-    const r = Math.random();
-    if (seat && r < 0.35) this.sitOn(seat);
-    else if (this.character.id === 'mochi' && this.stance === 'stand' && r < 0.48) this.mochiStroll();
-    else if (r < 0.6) this.peek();
-    else if (r < 0.85) this.teleport(this.spot('random'));
-    else this.flourish();
+    pick(actions)();
   }
 
   flourish() {
+    if (this.character.renderer === 'capri' && !reducedMotion.matches && Math.random() < 0.4) {
+      this.sprite.playClip?.(this.stance === 'sit' ? 'perch_glitch' : pick(['grin', 'glitch']));
+      return;
+    }
     if (this.stance === 'sit') this.perform(pick(['look', 'look', 'split']));
     else this.perform(pick(['spin', 'look', 'hop', 'curious', 'split']), this.towardCenter());
   }
 
   mochiStroll() {
-    if (this.mochiWalking || this.busy || this.hidden || this.locked || this.dragging || this.act || this.lineTalking || this.talk?.() > .04 || this.musicDance || this.manualDance || this.mode !== 'idle' || this.stance !== 'stand' || reducedMotion.matches) return;
+    if (this.mochiWalking || this.busy || this.hidden || this.locked || this.dragging || this.act || this.lineTalking || this.talk?.() > .04 || this.musicDance || this.mode !== 'idle' || this.stance !== 'stand' || reducedMotion.matches) return;
     const dir = this.pos.x < this.view.w * 0.3 ? 1 : this.pos.x > this.view.w * 0.7 ? -1 : pick([-1, 1]);
     const from = this.pos.x, to = clamp(from + dir * rand(90, 170), 80, this.view.w - 80);
     if (Math.abs(to - from) < 36) return;
     this.facing = -dir;
     const token = this.mochiWalking = {}, start = performance.now();
     const step = now => {
-      if (this.mochiWalking !== token || this.busy || this.hidden || this.locked || this.dragging || this.act || this.lineTalking || this.talk?.() > .04 || this.musicDance || this.manualDance || this.mode !== 'idle' || this.stance !== 'stand' || !this.wander || reducedMotion.matches) { if (this.mochiWalking === token) this.mochiWalking = null; return; }
+      if (this.mochiWalking !== token || this.busy || this.hidden || this.locked || this.dragging || this.act || this.lineTalking || this.talk?.() > .04 || this.musicDance || this.mode !== 'idle' || this.stance !== 'stand' || !this.wander || reducedMotion.matches) { if (this.mochiWalking === token) this.mochiWalking = null; return; }
       const k = Math.min(1, (now - start) / 2500);
       this.pos.x = from + (to - from) * k;
       if (k < 1) requestAnimationFrame(step); else this.mochiWalking = null;
@@ -616,10 +611,34 @@ export class Capri {
     requestAnimationFrame(step);
   }
 
+  async capriStroll() {
+    if (this.busy || this.hidden || this.locked || this.stance !== 'stand' || this.mode !== 'idle' || reducedMotion.matches) return;
+    const dir = this.pos.x < this.view.w * 0.3 ? 1 : this.pos.x > this.view.w * 0.7 ? -1 : pick([-1, 1]);
+    const from = this.pos.x, to = clamp(from + dir * rand(90, 170), 80, this.view.w - 80);
+    if (Math.abs(to - from) < 36) return;
+    this.facing = -dir;
+    const token = this.capriAmbient = { name: 'walk' }, start = performance.now();
+    const step = now => {
+      if (this.capriAmbient !== token || this.busy || this.hidden || this.locked || this.dragging || this.act || this.mode !== 'idle' || this.stance !== 'stand') { if (this.capriAmbient === token) this.capriAmbient = null; return; }
+      const k = Math.min(1, (now - start) / 2500);
+      this.pos.x = from + (to - from) * k;
+      if (k < 1) requestAnimationFrame(step); else this.capriAmbient = null;
+    };
+    requestAnimationFrame(step);
+  }
+
+  async capriDance() {
+    if (!this.musicDance || this.busy || this.hidden || this.locked || this.mode !== 'idle' || reducedMotion.matches) return;
+    const token = this.capriAmbient = { name: this.stance === 'sit' ? 'perch_dance' : 'dance' };
+    await sleep(2200);
+    if (this.capriAmbient === token) this.capriAmbient = null;
+  }
+
   // ---------- acting ----------
 
   // Play an act from acting.js. Resolves when it's over (or cut off by a stronger one).
   perform(name, dir = 0, { reach = 1 } = {}) {
+    this.capriAmbient = null;
     if (this.stowed || this.dormant) return Promise.resolve(); // nobody to act: she's in her biochip, or just her mask
     if (SPUN.has(this.stance) && name !== 'grabbed') return Promise.resolve(); // held, flying or knocked down: not now
     const act = ACTS[name];
@@ -644,6 +663,7 @@ export class Capri {
   }
 
   setStance(stance, { perch = null, peekSide = null, dir = 0 } = {}) {
+    if (stance !== this.stance) this.capriAmbient = null;
     this.stance = stance;
     this.perch = perch;
     this.peekSide = peekSide;
@@ -680,7 +700,9 @@ export class Capri {
     this.nextGaze = Math.max(this.nextGaze, now + rand(30000, 70000));
     if (this.mode === mode) return;
     const prev = this.mode;
+    this.capriAmbient = null;
     this.mode = mode;
+    if (prev === 'sleep' && mode === 'idle' && this.stance === 'stand') this.sprite.playClip?.('wake');
     if (mode === 'sleep') this.sleptAt = now;
     this.onMode?.(mode, prev);
     if (this.stance === 'stand') this.base = this.restBase();
@@ -1132,6 +1154,7 @@ export class Capri {
       await tween(p, { alpha: 0 }, 160, ease.linear);
       return head;
     }
+    this.sprite.playClip?.(this.stance === 'sit' ? 'perch_leave' : 'leave');
     this.voice.play('teleport-out');
     p.glitchSeed = Math.random() * 100;
     await tween(p, { glitch: 0.35, split: 3 }, 90, ease.linear);
@@ -1192,6 +1215,7 @@ export class Capri {
     this.fx.burst(toHead.x, toHead.y + 60 * s, { count: 10, power: 0.55, spread: 110 * s });
     if (stance === 'sit') this.perform('plop');
     await tween(p, { glitch: 0, split: 0 }, 220, ease.out);
+    if (stance === 'stand' || stance === 'sit') this.sprite.playClip?.(stance === 'sit' ? 'perch_arrive' : 'arrive');
   }
 
   // Leave in a column of light, reappear somewhere else.

@@ -344,7 +344,10 @@ async function boot() {
     if (!panel.visible && Math.random() < (when === 'end' ? 0.6 : 0.4)) panel.say({ kind: 'info', line: pick(lines), hold: 3800 });
   };
   panel.onChar = (kind) => voice.play('blip', { mood: kind });
-  panel.onTalk = (talking) => talking && capri.perform('talk');
+  panel.onTalk = (talking, text) => {
+    capri.lineTalking = talking;
+    if (talking) { capri.talkLine = text || ''; capri.talkStarted = performance.now(); capri.perform('talk'); }
+  };
   capri.onMenu = () => host.openMenu();
 
   // Her guide (guide.js): her welcome on first launch, and "How does it work?" in her menu,
@@ -951,12 +954,13 @@ async function boot() {
         mp.addEventListener('click', (e) => { const a = e.target.dataset?.a || (mp.classList.contains('is-icon') && 'pause'); if (a) host.media(a); });
         document.body.append(mp); draggable(mp, 'player'); badgeLook();
       }
-      const on = Boolean(cmd.title), playing = on && /play/i.test(cmd.status || '');
+      const on = Boolean(cmd.title), playing = on && String(cmd.status || '').toLowerCase() === 'playing';
       mp.hidden = !on; mp.classList.toggle('is-playing', playing);
       mp.querySelector('.mp-text').textContent = mp.title = on ? `${cmd.title}${cmd.artist ? ` — ${cmd.artist}` : ''}` : '';
       clearInterval(window.__uncleMusicDance);
-      capri.musicDance=playing;
-      if (playing) window.__uncleMusicDance = setInterval(() => { if (capri.character.renderer==='capri' && !capri.busy && !capri.act && !capri.dragging && !capri.hidden && !capri.stowed && !capri.dormant) capri.perform('hop'); }, 1500);
+      capri.musicPlaying=playing;
+      if (!playing) capri.danceSuppressed=false;
+      capri.musicDance=playing && !capri.danceSuppressed;
       return;
     }
     if (cmd.name === 'computer-cursor') { // her own cursor glides there just before she clicks
@@ -977,8 +981,8 @@ async function boot() {
       else if(action==='hang')await capri.peek('top');
       else if(action==='ride_cursor'){clearInterval(window.__uncleRide);window.__uncleRide=setInterval(async()=>{if(capri.dragging){clearInterval(window.__uncleRide);return;}const cursor=await host.cursor();if(cursor?.inside)capri.pos={x:cursor.x+30,y:cursor.y+30};},80);}
       else if(action==='leave_cursor')clearInterval(window.__uncleRide);
-      else if(action==='dance'){clearInterval(window.__uncleDance);capri.manualDance=true;window.__uncleDance=setInterval(()=>{if(capri.character.renderer==='capri' && !capri.busy && !capri.dragging && capri.mode==='idle')capri.perform('hop');},1200);}
-      else if(action==='stop_dance'){clearInterval(window.__uncleDance);clearInterval(window.__uncleMusicDance);capri.manualDance=false;capri.musicDance=false;}
+      else if(action==='dance'){clearInterval(window.__uncleDance);capri.danceSuppressed=false;capri.musicDance=Boolean(capri.musicPlaying);}
+      else if(action==='stop_dance'){clearInterval(window.__uncleDance);clearInterval(window.__uncleMusicDance);capri.danceSuppressed=true;capri.musicDance=false;}
       else if(action==='idle')capri.setMode('idle');
       else if(action==='smile')capri.perform('victory');
       else if(action==='blink')capri.perform('look');

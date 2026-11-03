@@ -490,7 +490,7 @@ export class Panel {
     }
     const chars = graphemes(text);
     let done = 0;
-    this.onTalk?.(true);
+    this.onTalk?.(true, text);
     const step = () => {
       done = Math.min(chars.length, done + 2);
       const head = chars.slice(0, done).join('');

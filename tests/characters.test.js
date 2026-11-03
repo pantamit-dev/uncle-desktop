@@ -9,6 +9,29 @@ const { CHARACTERS, characterFor } = require('../src/main/characters');
 global.matchMedia ??= () => ({ matches: false, addEventListener() {} });
 const load = (file) => import(pathToFileURL(path.join(__dirname, '../src/renderer/js', file)).href);
 
+test('Capri strips match their real assets and yield to actions, flight and reduced motion', async () => {
+  const { CAPRI_STRIPS, capriStripFor, capriMouthCell } = await load('character-renderer.js');
+  for (const [name, spec] of Object.entries(CAPRI_STRIPS)) {
+    const png = fs.readFileSync(path.join(__dirname, '../assets/capri/strips', `${name}.png`));
+    assert.equal(png.readUInt32BE(16) % spec.count, 0, name);
+    assert.ok(png.readUInt32BE(20) > 0, name);
+  }
+  assert.equal(capriStripFor({ stance: 'stand', mode: 'idle' }), 'idle');
+  assert.equal(capriStripFor({ stance: 'sit', mode: 'idle' }), 'perch');
+  assert.equal(capriStripFor({ stance: 'held', mode: 'idle' }), 'dangle');
+  assert.equal(capriStripFor({ stance: 'stand', mode: 'sleep' }), 'sleep');
+  assert.equal(capriStripFor({ stance: 'fly', mode: 'idle' }), null);
+  assert.equal(capriStripFor({ stance: 'fly', mode: 'idle', clip: 'dance' }), null);
+  assert.equal(capriStripFor({ stance: 'stand', mode: 'alert' }), null);
+  assert.equal(capriStripFor({ stance: 'stand', mode: 'idle', clip: 'walk' }), 'walk');
+  assert.equal(capriStripFor({ stance: 'sit', mode: 'idle', dance: true }), 'perch_dance');
+  assert.equal(capriStripFor({ stance: 'stand', mode: 'idle', act: 'victory' }), null);
+  assert.equal(capriStripFor({ stance: 'stand', mode: 'idle' }, true), null);
+  assert.equal(capriMouthCell('a', 0), 3);
+  assert.equal(capriMouthCell('M', 0), 0);
+  assert.equal(capriMouthCell('ก', 0), 2);
+});
+
 test('only shipped character IDs resolve, and each has the complete asset set', () => {
   assert.equal(characterFor('blacky').name, 'Blacky');
   assert.equal(characterFor('capri').renderer, 'capri');
