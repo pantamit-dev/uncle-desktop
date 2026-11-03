@@ -6,7 +6,7 @@ Active packs in catalog.json (source 0.23.10, checked 2026-11-01):
 
 | Character | Full-body manifest frames | Dedicated bust manifest frames | Available frame-size tiers |
 |---|---|---|---|
-| Mochi | 30 | 30 | 320x420, 640x840 |
+| Mochi | 43 | 43 | 320x420, 640x840 |
 | Lili, Luna, Pudding, Tama | 12 each | 12 each | 320x420, 640x840 |
 | Peegee | 12 | none; renderer crops full-body art | 320x420, 640x840 |
 
@@ -38,6 +38,8 @@ npm run dist
 The packer rejects requests for resolution greater than the source canvas; it does not reconstruct detail. For existing 4x6 files, `--legacy path/to/atlas.webp` creates a 320 tier. `tools/package-bust-sheets.py` extracts the six authored poses from a 1536x1024 imagegen sheet and pads them without upscaling. Tests: `node --test tests/character-pipeline.test.js` and, with the app running `--dev`, `node scripts/smoke-layered-display.js`.
 
 Mochi's newer `sequence-30-full` and `sequence-30-bust` packs contain 24 state frames plus six ordered conversation frames per view, generated in separate small sheets. `continuousTracks` opts into the authored idle sequence instead of the older director's idle hold. `orderedSpeech` selects adjacent small or full gestures, with a 110ms crossfade that settles before the next speech frame. Other characters retain their existing director. `tools/package-mochi-30.py --activate` rebuilds both views and the 24-frame legacy fallback; source prompts and measured torso calibration are in `../character-sources/mochi-30`. The local torso warp now supplies bounded secondary movement for configured characters; it is a texture deformation, not anatomical soft-body simulation.
+
+Mochi's active `sequence-motion` packs preserve those 30 frames and add four side-profile walk frames, four seated frames, one held pose and four dance frames. The left-facing art is mirrored for rightward walking; asymmetric clothing changes sides when mirrored. New bust action frames are cropped and enlarged from the full-body action art, so they do not have the same native detail as the original dedicated bust frames. `tools/package-mochi-motion.py` rebuilds these packs using source art in `../character-sources/mochi-motion-v1`. Entrance/exit effects still use the existing procedural effects; the held pose is a single image.
 
 In 0.23.1, Mochi randomly chooses among three coherent ambient paths and three speech paths, excluding the last-used path and varying dwell times. `idleMotion` and `thinkingMotion` map the ambient indices to authored frames. Speech and important states take priority. Mochi's torso uses a calibrated impulse of 45 (previously 32) and visual gain 1.6; the existing gradient/foldover clamps still apply.
 

@@ -432,6 +432,7 @@ export class Capri {
     const reaction = now < (this.reactionUntil || 0) ? this.reaction : '';
     this.sprite.draw(this.p, { mode: this.mode, act: this.act?.player.name, reaction, talk: this.talk?.() || 0,
       dance:!!(this.musicDance||this.manualDance) && !this.busy && !this.dragging && !this.hidden && !this.stowed && !this.dormant && this.stance==='stand',
+      clip: this.mochiWalking ? 'walk' : undefined,
       position: this.pos, stance: this.stance, moving: this.stance === 'fly',
       bodyAngle: this.tilt * DEG,
       gaze: this.mouse ? {x: clamp((this.mouse.x-this.pos.x)/300,-1,1),y:clamp((this.mouse.y-this.head().y)/300,-1,1)} : null });
@@ -588,6 +589,7 @@ export class Capri {
     const seat = this.pickSeat();
     const r = Math.random();
     if (seat && r < 0.35) this.sitOn(seat);
+    else if (this.character.id === 'mochi' && this.stance === 'stand' && r < 0.48) this.mochiStroll();
     else if (r < 0.6) this.peek();
     else if (r < 0.85) this.teleport(this.spot('random'));
     else this.flourish();
@@ -596,6 +598,22 @@ export class Capri {
   flourish() {
     if (this.stance === 'sit') this.perform(pick(['look', 'look', 'split']));
     else this.perform(pick(['spin', 'look', 'hop', 'curious', 'split']), this.towardCenter());
+  }
+
+  mochiStroll() {
+    if (this.mochiWalking || this.busy || this.hidden || this.locked || this.dragging || this.act || this.lineTalking || this.talk?.() > .04 || this.musicDance || this.manualDance || this.mode !== 'idle' || this.stance !== 'stand' || reducedMotion.matches) return;
+    const dir = this.pos.x < this.view.w * 0.3 ? 1 : this.pos.x > this.view.w * 0.7 ? -1 : pick([-1, 1]);
+    const from = this.pos.x, to = clamp(from + dir * rand(90, 170), 80, this.view.w - 80);
+    if (Math.abs(to - from) < 36) return;
+    this.facing = -dir;
+    const token = this.mochiWalking = {}, start = performance.now();
+    const step = now => {
+      if (this.mochiWalking !== token || this.busy || this.hidden || this.locked || this.dragging || this.act || this.lineTalking || this.talk?.() > .04 || this.musicDance || this.manualDance || this.mode !== 'idle' || this.stance !== 'stand' || !this.wander || reducedMotion.matches) { if (this.mochiWalking === token) this.mochiWalking = null; return; }
+      const k = Math.min(1, (now - start) / 2500);
+      this.pos.x = from + (to - from) * k;
+      if (k < 1) requestAnimationFrame(step); else this.mochiWalking = null;
+    };
+    requestAnimationFrame(step);
   }
 
   // ---------- acting ----------

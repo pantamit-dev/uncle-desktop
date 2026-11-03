@@ -22,6 +22,14 @@ export class Spring {
 export function trackFrame(layer, state, elapsed, fps=4, context={}) {
   const still=context.still;
   let key=state;
+  if(layer.role==='composite' && !still && state==='idle' && !context.reaction &&
+    !context.lineTalking && !(context.talk>.04)) {
+    const action=context.stance==='held' ? 'held' : !context.act ?
+      (context.clip==='walk' && context.stance==='stand' ? 'walk' :
+        context.dance ? 'dance' : context.stance==='sit' ? 'sit' : null) : null;
+    const sequence=layer.tracks?.[action];
+    if(sequence?.length)return sequence[Math.floor(elapsed*fps/1000)%sequence.length];
+  }
   if(layer.role==='composite' && !still && (state==='idle'||state==='thinking') &&
     Number.isInteger(context.speechFrame) && layer.tracks?.speechMotion?.length) {
     const sequence=layer.tracks.speechMotion;

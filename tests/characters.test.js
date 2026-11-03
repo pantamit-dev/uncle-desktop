@@ -60,11 +60,11 @@ test('Mochi has thirty registered ordered poses in both views with a legacy fall
   assert.equal(mochi.fps,4);
   for(const relative of [mochi.spriteManifest,mochi.bustManifest]) {
     const manifest=validateManifest(JSON.parse(fs.readFileSync(path.join(__dirname,'../assets/characters',relative))));
-    assert.match(manifest.sourceDetail,/no upscaling/);
+    assert.match(manifest.sourceDetail,/authored motion/);
     assert.deepEqual(manifest.variants.map(v=>v.frameWidth),[320,640]);
     for(const variant of manifest.variants) {
       const layer=variant.layers[0];
-      assert.equal(layer.frames.length,30);
+      assert.ok(layer.frames.length>=30);
       assert.equal(layer.continuousTracks,true);
       assert.deepEqual(layer.tracks.speechMotion,[24,25,26,27,28,29]);
       for(const state of ['thinking','attention','success','error','sleep'])assert.equal(layer.tracks[state].length,4);

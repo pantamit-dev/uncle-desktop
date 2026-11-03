@@ -90,6 +90,59 @@ test('independent blink, mouth, gaze and leg tracks preserve other states',async
   for(const [state,index] of [['thinking',1],['success',2],['error',3]])assert.equal(trackFrame(layer,state,0),index);
 });
 
+test('optional composite action tracks yield to speech, alerts and reduced motion',async()=>{
+  const {trackFrame}=await load('character-rig.js');
+  const layer={role:'composite',frames:Array.from({length:8},()=>({})),
+    tracks:{idle:[0],attention:[1],held:[2,3],walk:[4,5],sit:[6],dance:[7]}};
+  assert.equal(trackFrame(layer,'idle',250,4,{stance:'held',act:'grabbed'}),3);
+  assert.equal(trackFrame(layer,'idle',250,4,{stance:'stand',clip:'walk'}),5);
+  assert.equal(trackFrame(layer,'idle',0,4,{stance:'sit'}),6);
+  assert.equal(trackFrame(layer,'idle',0,4,{stance:'stand',dance:true}),7);
+  for(const context of [{still:true},{talk:.5},{lineTalking:true},{act:'hop'},{reaction:'attention'}])
+    assert.equal(trackFrame(layer,'idle',0,4,{stance:'stand',clip:'walk',...context}),0);
+  assert.equal(trackFrame(layer,'attention',0,4,{stance:'stand',clip:'walk'}),1);
+  assert.equal(trackFrame({...layer,tracks:{idle:[0]}},'idle',0,4,{stance:'sit'}),0);
+});
+
+test('Mochi motion packs keep both views and include bounded action tracks',async()=>{
+  const fs=require('node:fs');
+  const {validateManifest}=await load('character-assets.js');
+  const catalog=require('../assets/characters/catalog.json');
+  const mochi=catalog.find(c=>c.id==='mochi');
+  for(const file of [mochi.spriteManifest,mochi.bustManifest]) {
+    const manifest=validateManifest(JSON.parse(fs.readFileSync(path.join(__dirname,'../assets/characters',file))));
+    for(const variant of manifest.variants) {
+      const tracks=variant.layers[0].tracks;
+      assert.equal(tracks.walk.length,4);
+      assert.equal(tracks.dance.length,4);
+      assert.ok(new Set(tracks.sit).size>=3);
+      assert.equal(tracks.held.length,1);
+      for(const page of variant.pages) assert.ok(fs.existsSync(path.join(__dirname,'../assets/characters',path.dirname(file),page.file)));
+    }
+  }
+});
+
+test('Mochi walks in both directions and stops for interaction or reduced motion',async()=>{
+  global.matchMedia ??= () => ({matches:false,addEventListener(){}});
+  const {Capri}=await load('capri.js');
+  const {reducedMotion}=await load('util.js');
+  const previous=global.requestAnimationFrame,setting=reducedMotion.setting;
+  let next;
+  global.requestAnimationFrame=fn=>{next=fn;};
+  try {
+    reducedMotion.setting='full';
+    const make=x=>({pos:{x},view:{w:1000},wander:true,mode:'idle',stance:'stand'});
+    for(const [x,dir] of [[100,1],[900,-1]]) {
+      const actor=make(x);Capri.prototype.mochiStroll.call(actor);
+      assert.equal(actor.facing,-dir);assert.ok(actor.mochiWalking);
+      next(performance.now()+1200);assert.ok((actor.pos.x-x)*dir>0);
+      actor.dragging=true;next(performance.now()+1300);assert.equal(actor.mochiWalking,null);
+    }
+    reducedMotion.setting='reduced';
+    const actor=make(100);Capri.prototype.mochiStroll.call(actor);assert.equal(actor.mochiWalking,undefined);
+  } finally {global.requestAnimationFrame=previous;reducedMotion.setting=setting;}
+});
+
 test('shipped bust art contains six distinct native-size source poses and validated atlas pages', async()=>{
   const fs=require('node:fs');
   const {validateManifest,chooseVariant}=await load('character-assets.js');
