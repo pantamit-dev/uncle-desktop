@@ -127,6 +127,24 @@ test('Mochi motion packs keep both views and include bounded action tracks',asyn
   }
 });
 
+test('Lili action packs keep both views and play walking independently of speech rate',async()=>{
+  const fs=require('node:fs');
+  const {validateManifest}=await load('character-assets.js');
+  const {trackFrame}=await load('character-rig.js');
+  const lili=require('../assets/characters/catalog.json').find(c=>c.id==='lili');
+  for(const file of [lili.spriteManifest,lili.bustManifest]) {
+    const manifest=validateManifest(JSON.parse(fs.readFileSync(path.join(__dirname,'../assets/characters',file))));
+    for(const variant of manifest.variants) {
+      const layer=variant.layers[0];
+      assert.equal(layer.tracks.walk.length,4);assert.equal(layer.tracks.sit.length,4);assert.equal(layer.tracks.wake.length,3);
+      assert.equal(layer.tracks.perch_arrive.length,4);assert.deepEqual(layer.tracks.perch_leave,[...layer.tracks.perch_arrive].reverse());
+      assert.equal(layer.tracks.arrive.length,4);assert.deepEqual(layer.tracks.leave,[...layer.tracks.arrive].reverse());
+      assert.equal(trackFrame(layer,'idle',250,lili.fps,{stance:'stand',clip:'walk',actionFps:lili.actionFps}),layer.tracks.walk[1]);
+      assert.equal(trackFrame(layer,'idle',250,lili.fps,{stance:'stand',clip:'walk',actionFps:lili.actionFps,still:true}),layer.tracks.idle[0]);
+    }
+  }
+});
+
 test('Mochi walks in both directions and stops for interaction or reduced motion',async()=>{
   global.matchMedia ??= () => ({matches:false,addEventListener(){}});
   const {Capri}=await load('capri.js');
@@ -138,13 +156,13 @@ test('Mochi walks in both directions and stops for interaction or reduced motion
     reducedMotion.setting='full';
     const make=x=>({pos:{x},view:{w:1000},wander:true,mode:'idle',stance:'stand'});
     for(const [x,dir] of [[100,1],[900,-1]]) {
-      const actor=make(x);Capri.prototype.mochiStroll.call(actor);
-      assert.equal(actor.facing,-dir);assert.ok(actor.mochiWalking);
+      const actor=make(x);Capri.prototype.characterStroll.call(actor);
+      assert.equal(actor.facing,-dir);assert.ok(actor.characterWalking);
       next(performance.now()+1200);assert.ok((actor.pos.x-x)*dir>0);
-      actor.dragging=true;next(performance.now()+1300);assert.equal(actor.mochiWalking,null);
+      actor.dragging=true;next(performance.now()+1300);assert.equal(actor.characterWalking,null);
     }
     reducedMotion.setting='reduced';
-    const actor=make(100);Capri.prototype.mochiStroll.call(actor);assert.equal(actor.mochiWalking,undefined);
+    const actor=make(100);Capri.prototype.characterStroll.call(actor);assert.equal(actor.characterWalking,undefined);
   } finally {global.requestAnimationFrame=previous;reducedMotion.setting=setting;}
 });
 
@@ -153,11 +171,11 @@ test('available idle actions are equally likely and never randomly select dancin
   const {Capri}=await load('capri.js');
   const previous=Math.random;
   try {
-    for(const [id,seat,expected] of [['mochi',null,['peek','teleport','flourish','walk']],['mochi',{},['sit','peek','teleport','flourish','walk']],['capri',{},['sit','peek','teleport','flourish','walk']]]) {
+    for(const [id,seat,expected] of [['mochi',null,['peek','teleport','flourish','walk']],['mochi',{},['sit','peek','teleport','flourish','walk']],['lili',{},['sit','peek','teleport','flourish','walk']],['capri',{},['sit','peek','teleport','flourish','walk']]]) {
       for(let i=0;i<expected.length;i++) {
         let action='';Math.random=()=>(i+.5)/expected.length;
         const actor={wander:true,locked:false,stance:'stand',fondness:0,character:{id,renderer:id==='capri'?'capri':undefined},
-          pickSeat:()=>seat,peek:()=>{action='peek';},mochiStroll:()=>{action='walk';},capriStroll:()=>{action='walk';},
+          pickSeat:()=>seat,peek:()=>{action='peek';},characterStroll:()=>{action='walk';},capriStroll:()=>{action='walk';},
           sitOn:()=>{action='sit';},spot:()=>({}),teleport:()=>{action='teleport';},flourish:()=>{action='flourish';},capriDance:()=>{action='dance';}};
         Capri.prototype.wanderStep.call(actor);
         assert.equal(action,expected[i],`character=${id}, seat=${!!seat}, index=${i}`);
@@ -184,6 +202,8 @@ test('dancing requires an actively playing media session',async()=>{
   Capri.prototype.drawFrame.call(actor,100);
   assert.equal(context.dance,false);assert.equal(context.clip,undefined);
   actor.musicDance=true;Capri.prototype.drawFrame.call(actor,101);assert.equal(context.dance,true);
+  actor.character.id='lili';actor.stance='sit';Capri.prototype.drawFrame.call(actor,102);assert.equal(context.dance,true);
+  actor.musicDance=false;Capri.prototype.drawFrame.call(actor,103);assert.equal(context.dance,false);
   actor.musicDance=false;await Capri.prototype.capriDance.call(actor);assert.equal(actor.capriAmbient.name,'dance');
 });
 

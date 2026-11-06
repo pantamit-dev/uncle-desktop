@@ -26,12 +26,12 @@ export function trackFrame(layer, state, elapsed, fps=4, context={}) {
     !context.lineTalking && !(context.talk>.04)) {
     const special=layer.tracks?.[context.special?.name];
     if(special?.length && !context.act && ['stand','sit'].includes(context.stance))
-      return special[Math.min(special.length-1,Math.floor(context.special.elapsed*fps/1000))];
+      return special[Math.min(special.length-1,Math.floor(context.special.elapsed*(context.actionFps || fps)/1000))];
     const action=context.stance==='held' ? 'held' : !context.act ?
       (context.clip==='walk' && context.stance==='stand' ? 'walk' :
         context.dance ? (context.stance==='sit' ? 'perch_dance' : 'dance') : context.stance==='sit' ? 'sit' : null) : null;
     const sequence=layer.tracks?.[action] || (action==='perch_dance' ? layer.tracks?.sit : null);
-    if(sequence?.length)return sequence[Math.floor(elapsed*fps/1000)%sequence.length];
+    if(sequence?.length)return sequence[Math.floor(elapsed*(context.actionFps || fps)/1000)%sequence.length];
   }
   if(layer.role==='composite' && !still && (state==='idle'||state==='thinking') &&
     Number.isInteger(context.speechFrame) && layer.tracks?.speechMotion?.length) {

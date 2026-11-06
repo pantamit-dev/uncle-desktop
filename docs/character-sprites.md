@@ -7,7 +7,8 @@ Active packs in catalog.json (source 0.23.10, checked 2026-11-01):
 | Character | Full-body manifest frames | Dedicated bust manifest frames | Available frame-size tiers |
 |---|---|---|---|
 | Mochi | 55 | 55 | 320x420, 640x840 |
-| Lili, Luna, Pudding, Tama | 12 each | 12 each | 320x420, 640x840 |
+| Lili | 31 | 31 | 320x420, 640x840 |
+| Luna, Pudding, Tama | 12 each | 12 each | 320x420, 640x840 |
 | Peegee | 12 | none; renderer crops full-body art | 320x420, 640x840 |
 
 These counts describe the active whole-image layer in each manifest, not every older pack left in the asset directory. They do not imply independent eyes, mouth or hands. Audio switches between authored whole-frame poses; it is not phoneme lip sync. Storage dimensions do not imply that every figure fills its canvas or has native detail at that entire size. No current 960x1260 native-detail artwork is claimed. Small outfit differences may appear when switching poses.
@@ -40,6 +41,8 @@ The packer rejects requests for resolution greater than the source canvas; it do
 Mochi's newer `sequence-30-full` and `sequence-30-bust` packs contain 24 state frames plus six ordered conversation frames per view, generated in separate small sheets. `continuousTracks` opts into the authored idle sequence instead of the older director's idle hold. `orderedSpeech` selects adjacent small or full gestures, with a 110ms crossfade that settles before the next speech frame. Other characters retain their existing director. `tools/package-mochi-30.py --activate` rebuilds both views and the 24-frame legacy fallback; source prompts and measured torso calibration are in `../character-sources/mochi-30`. The local torso warp now supplies bounded secondary movement for configured characters; it is a texture deformation, not anatomical soft-body simulation.
 
 Mochi's active `sequence-motion` packs preserve those 30 frames and add side-profile walking, seated, held, dancing, waking and arrival frames; the departure track reverses the arrival frames. The left-facing walk art is mirrored for rightward walking; asymmetric clothing changes sides when mirrored. New bust action frames are cropped and enlarged from the full-body action art, so they do not have the same native detail as the original dedicated bust frames. `tools/package-mochi-motion.py` rebuilds these packs using source art in `../character-sources/mochi-motion-v1`. Seated dance currently uses seated frames with procedural movement, and the original entrance/exit effects remain active.
+
+Lili's `action-v1` packs retain the existing 12 frames and add four side-profile walking frames, four seated frames, three waking frames, four seated greeting frames and four standing greeting frames. Departure tracks reverse the greeting frames, and the walking art is mirrored for the other direction. New bust action frames are cropped and enlarged from full-body art. Held uses the existing fallback and dance uses procedural movement. Rebuild with `tools/package-lili-motion.py` using the local source images in `../character-sources/lili-motion-v1`.
 
 In 0.23.1, Mochi randomly chooses among three coherent ambient paths and three speech paths, excluding the last-used path and varying dwell times. `idleMotion` and `thinkingMotion` map the ambient indices to authored frames. Speech and important states take priority. Mochi's torso uses a calibrated impulse of 45 (previously 32) and visual gain 1.6; the existing gradient/foldover clamps still apply.
 

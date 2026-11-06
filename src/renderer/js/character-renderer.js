@@ -231,7 +231,7 @@ export class CharacterRenderer {
     if (this.special) {
       const frames=this.source?.manifest.variants[0].layers[0].tracks?.[this.special.name];
       const elapsed=now-this.special.started;
-      if (!frames || reducedMotion.matches || state!=='idle' || context.reaction || context.lineTalking || context.talk>.04 || context.act || context.dance || context.clip==='walk' || !['stand','sit'].includes(context.stance) || elapsed>=frames.length*1000/(this.character.fps || 4)) this.special=null;
+      if (!frames || reducedMotion.matches || state!=='idle' || context.reaction || context.lineTalking || context.talk>.04 || context.act || context.dance || context.clip==='walk' || !['stand','sit'].includes(context.stance) || elapsed>=frames.length*1000/(this.character.actionFps || this.character.fps || 4)) this.special=null;
       else context={...context,special:{name:this.special.name,elapsed}};
     }
     if (this.source) this.prepareComposite(now, {...context, ...motion});
@@ -307,7 +307,7 @@ export class CharacterRenderer {
     const variant=chooseVariant(view.manifest.variants,density,gpuTextureLimit());
     if(!variant){this.fallback();return;}
     const state=this.state;
-    const rigContext={...context,state,frame:this.frame,still:reducedMotion.matches};
+    const rigContext={...context,state,frame:this.frame,still:reducedMotion.matches,actionFps:this.character.actionFps};
     const elapsed=now-this.started;
     const selected=variant.layers.map(layer=>({layer,frame:layer.frames[trackFrame(layer,state,elapsed,this.character.fps,rigContext)]}));
     const key=JSON.stringify([variant.frameWidth,viewName,this.framing,selected.map(s=>s.layer.frames.indexOf(s.frame))]);
